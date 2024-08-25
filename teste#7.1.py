@@ -1,4 +1,4 @@
-# Modelo de saber a semelgança dos senhosbretirados para testar mais rapido o codigo
+# Esse ele usa dados antigos para treinamento, ou sjea, ele vai usar dados de treinos antigos para ajudar treinar e ele consegue dizer se o sonho é ludico dou nao 
 import torch  # Importa a biblioteca PyTorch para operações de aprendizado profundo
 import torch.nn as nn  # Importa o módulo de redes neurais do PyTorch
 import torch.optim as optim  # Importa otimizadores do PyTorch
@@ -55,6 +55,10 @@ def train_model(X, y, model=None):  # Função para treinar a rede neural com da
     X_tensor = torch.tensor(X, dtype=torch.float32)
     y_tensor = torch.tensor(y, dtype=torch.float32).view(-1, 1)
     
+    # Verificação do tamanho dos tensores
+    if X_tensor.size(0) != y_tensor.size(0):  # Verifica se o número de amostras é o mesmo
+        raise ValueError(f"Tamanhos incompatíveis: X_tensor tem {X_tensor.size(0)} amostras e y_tensor tem {y_tensor.size(0)} amostras.")
+    
     best_loss = float('inf')  # Inicializa a melhor perda como infinito
     patience = 10  # Número de épocas para aguardar sem melhoria antes de parar
     patience_counter = 0  # Contador para Early Stopping
@@ -63,6 +67,10 @@ def train_model(X, y, model=None):  # Função para treinar a rede neural com da
         model.train()  # Coloca o modelo em modo de treinamento
         optimizer.zero_grad()  # Zera os gradientes do otimizador
         outputs = model(X_tensor)  # Faz a previsão
+        
+        # Verificação do tamanho da saída
+        if outputs.size() != y_tensor.size():  # Verifica se o tamanho da saída corresponde ao tamanho dos rótulos
+            raise ValueError(f"Tamanhos incompatíveis: outputs tem {outputs.size()} e y_tensor tem {y_tensor.size()}.")
         
         loss = criterion(outputs, y_tensor)  # Calcula a perda
         loss.backward()  # Calcula os gradientes
@@ -84,17 +92,22 @@ def train_model(X, y, model=None):  # Função para treinar a rede neural com da
 
     return model  # Retorna o modelo treinado
 
-# Função para prever se um sonho é lúcido ou um pesadelo
-def predict_dream_type(model, vectorizer, dream):  # Função para prever o tipo de sonho
-    dream_processed = preprocess_text(dream)  # Processa o texto do sonho
+# Função para prever a similaridade entre dois sonhos
+def predict_similarity(model, vectorizer, dream1, dream2):  # Função para prever a similaridade entre dois sonhos
+    dream1_processed = preprocess_text(dream1)  # Processa o texto do primeiro sonho
+    dream2_processed = preprocess_text(dream2)  # Processa o texto do segundo sonho
     
-    X = vectorizer.transform([dream_processed]).toarray()  # Converte o texto em matriz TF-IDF
+    # Vetoriza os sonhos processados
+    dreams = [dream1_processed, dream2_processed]
+    X = vectorizer.transform(dreams).toarray()  # Converte os textos em matrizes TF-IDF
     X = normalize_data(X)  # Normaliza os dados
     X_tensor = torch.tensor(X, dtype=torch.float32)  # Converte para tensor do PyTorch
     
-    output = model(X_tensor)  # Faz a previsão com o modelo
-    dream_type = "Sonho Lúcido" if output.item() >= 0.5 else "Pesadelo"  # Classifica como 'Sonho Lúcido' ou 'Pesadelo'
-    return dream_type, output.item()  # Retorna o tipo de sonho e a probabilidade
+    # Autograd está ativa aqui, então os gradientes serão calculados
+    output = model(X_tensor[0] - X_tensor[1])  # Calcula a saída do modelo para a diferença dos vetores de sonhos
+    similarity_score = torch.sigmoid(output).item()  # Aplica a função sigmoid para obter uma probabilidade
+    dream_type = "Sonho Lúcido" if similarity_score >= 0.5 else "Pesadelo"  # Classifica como 'Sonho Lúcido' ou 'Pesadelo'
+    return dream_type, similarity_score  # Retorna o tipo de sonho e o valor da similaridade
 
 # Função para carregar sonhos de um arquivo .txt
 def load_dreams_from_file(filename):  # Função para carregar sonhos de um arquivo de texto
@@ -102,26 +115,30 @@ def load_dreams_from_file(filename):  # Função para carregar sonhos de um arqu
         dreams = [line.strip() for line in file.readlines()]  # Lê todas as linhas e remove espaços extras
     return dreams  # Retorna a lista de sonhos
 
-# Exemplo de uso
-dreams = load_dreams_from_file('sonhos.txt')  # Carrega os sonhos do arquivo 'sonhos.txt'
+# Exemplo de treinamento do modelo com dados fictícios
+dreams = [
+    "Eu estava voando sobre uma cidade desconhecida.",
+    "Eu estava perdido em uma floresta escura e assustadora.",
+    "Eu estava em uma sala cheia de pessoas, mas me sentia sozinho.",
+    "Eu estava nadando em um oceano calmo e claro."
+]  # Lista de sonhos para treinamento
 
-# Relações entre sonhos e seus tipos (1 para Lúcido, 0 para Pesadelo)
-relations = [1, 0, 1, 0]  # Exemplo: Adapte isso para seus dados
+labels = [1, 0, 0, 1]  # Rótulos dos sonhos, onde 1 representa 'Sonho Lúcido' e 0 representa 'Pesadelo'
 
-vectorizer = TfidfVectorizer()  # Cria uma instância do vetorizador TF-IDF
-dreams_processed = [preprocess_text(dream) for dream in dreams]  # Processa todos os sonhos
-X = vectorizer.fit_transform(dreams_processed).toarray()  # Transforma os sonhos em matrizes TF-IDF e converte para array
+vectorizer = TfidfVectorizer(max_features=1000)  # Cria um vetorizador TF-IDF com no máximo 1000 características
+X = vectorizer.fit_transform(dreams).toarray()  # Ajusta e transforma os sonhos em uma matriz TF-IDF
 X = normalize_data(X)  # Normaliza os dados
 
-# Verifica se existe um modelo treinado salvo; se não, treina um novo modelo
-try:
-    model = torch.load('dados_treinamento/dream_network_model.pth')  # Tenta carregar um modelo previamente treinado
-    print("Modelo carregado com sucesso!")
-except FileNotFoundError:  # Se o modelo não for encontrado
-    model = train_model(X, np.array(relations))  # Treina um novo modelo com os dados e relações
-    torch.save(model, 'dados_treinamento/dream_network_model.pth')  # Salva o modelo treinado em um arquivo
+model = train_model(X, labels)  # Treina o modelo com os dados normalizados
 
-dream = "Eu estava fugindo de monstros em uma floresta escura"  # Exemplo de sonho
+# Carrega sonhos de um arquivo e faz previsões
+dreams_from_file = load_dreams_from_file('sonhos.txt')  # Carrega sonhos de um arquivo
 
-dream_type, confidence = predict_dream_type(model, vectorizer, dream)  # Prevejo o tipo de sonho
-print(f"Tipo de sonho: {dream_type}, Confiança: {confidence:.2f}")  # Imprime o resultado
+for i in range(len(dreams_from_file) - 1):  # Para cada par de sonhos no arquivo
+    dream1 = dreams_from_file[i]  # Primeiro sonho
+    dream2 = dreams_from_file[i + 1]  # Segundo sonho
+    dream_type, similarity = predict_similarity(model, vectorizer, dream1, dream2)  # Faz a previsão
+    print(f"Dream 1: {dream1}")  # Imprime o primeiro sonho
+    print(f"Dream 2: {dream2}")  # Imprime o segundo sonho
+    print(f"Type: {dream_type}, Similarity: {similarity:.4f}")  # Imprime o tipo de sonho e a similaridade
+    print("---")  # Imprime um separador
