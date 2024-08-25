@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dream Analyzer</title>
+    <style>
+        body {
+            background-color: #000000;
+            color: #ffffff;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #input-area {
+            text-align: center;
+            width: 80%;
+            max-width: 600px;
+        }
+
+        h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background-color: #333333;
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 1em;
+            resize: none;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #ffffff;
+            color: #000000;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #555555;
+            color: #ffffff;
+        }
+
+        #result {
+            margin-top: 20px;
+            text-align: left;
+            font-size: 1em;
+            line-height: 1.5em;
+        }
+
+        #result h2 {
+            text-align: center;
+        }
+
+        #result p {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="input-area">
+        <h2>Enter Your Dreams</h2>
+        <textarea id="dreams" rows="10" cols="50" placeholder="Write each dream on a new line..."></textarea>
+        <br>
+        <button onclick="analyzeDreams()">Analyze Dreams</button>
+    </div>
+
+    <div id="result"></div>
+
+    <script>
+        async function analyzeDreams() {
+            const dreamsText = document.getElementById('dreams').value;
+            const dreams = dreamsText.split('\n').filter(dream => dream.trim() !== '');
+            
+            const response = await fetch('http://127.0.0.1:5000/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ dreams: dreams })
+            });
+
+            const result = await response.json();
+            displayResult(result);
+        }
+
+        function displayResult(similarities) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<h2>Similarities between Dreams</h2>';
+            similarities.forEach(similarity => {
+                const p = document.createElement('p');
+                p.textContent = `Dream ${similarity.dream1} and Dream ${similarity.dream2} have a similarity score of ${similarity.similarity.toFixed(4)}`;
+                resultDiv.appendChild(p);
+            });
+        }
+    </script>
+</body>
+</html>
